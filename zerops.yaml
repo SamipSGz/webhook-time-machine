@@ -1,21 +1,22 @@
 # Build + run config for the two Python app services (api, worker).
-# Deps are installed in the RUN container via prepareCommands: Zerops build and
-# run are separate containers, so packages pip-installed during build do not
-# exist at runtime. deployFiles ships the code; prepareCommands installs deps.
+# Zerops build and run are SEPARATE containers. Pattern (per Zerops Python docs):
+#   deployFiles      -> ships app code to the run container
+#   addToRunPrepare  -> copies requirements.txt into the run-prepare container
+#   run.prepareCommands -> pip installs there, so deps exist at runtime
 
 zerops:
   # ============================================================ API (public)
   - setup: api
     build:
       base: python@3.12
-      buildCommands:
-        - echo "packaging application files"
       deployFiles: ./
+      addToRunPrepare:
+        - requirements.txt
     run:
       base: python@3.12
       prepareCommands:
-        - python -m pip install --upgrade pip
-        - python -m pip install -r requirements.txt
+        - python3 -m pip install --upgrade pip
+        - python3 -m pip install --ignore-installed -r requirements.txt
       ports:
         - port: 8000
           httpSupport: true
@@ -35,7 +36,7 @@ zerops:
         INTERNAL_BASE_URL: http://api:8000
         MAX_ATTEMPTS: "5"
         BASE_BACKOFF_SECONDS: "2"
-      start: python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips '*'
+      start: python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips '*'
       healthCheck:
         httpGet:
           port: 8000
@@ -45,13 +46,13 @@ zerops:
   - setup: worker
     build:
       base: python@3.12
-      buildCommands:
-        - echo "packaging application files"
       deployFiles: ./
+      addToRunPrepare:
+        - requirements.txt
     run:
       base: python@3.12
       prepareCommands:
-        - python -m pip install --upgrade pip
-        - python -m pip install -r requirements.txt
+        - python3 -m pip install --upgrade pip
+        - python3 -m pip install --ignore-installed -r requirements.txt
       envVariables: *appenv
-      start: python -m app.worker
+      start: python3 -m app.worker
