@@ -1,0 +1,12 @@
+<!-- Local-dev only: the clickhouse-server image locks the `default` user to
+     localhost. This appends ::/0 so the app (connecting from the host / docker
+     bridge) can reach it. Not used on Zerops — managed ClickHouse handles auth. -->
+<clickhouse>
+  <users>
+    <default>
+      <networks>
+        <ip>::/0</ip>
+      </networks>
+    </default>
+  </users>
+</clickhouse>
