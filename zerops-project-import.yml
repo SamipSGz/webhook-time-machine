@@ -1,0 +1,44 @@
+# Zerops project import — creates the whole stack in ONE step.
+# Import via: Zerops GUI → "Import project" (paste this), or `zcli project import`.
+#
+# THE INFRA-DRAG STORY: this single file provisions 5 managed services + 2 app
+# services on one private network with credentials auto-injected. No VPCs, no
+# security groups, no connection-string juggling, no separate broker/storage setup.
+project:
+  name: webhook-time-machine
+  tags:
+    - zerops-challenge
+
+services:
+  # ---------- managed services (private network, auto-injected credentials) ----------
+  - hostname: db                 # PostgreSQL — endpoints, events, delivery state
+    type: postgresql@16
+    mode: NON_HA
+
+  - hostname: nats               # JetStream — durable delivery queue + retries
+    type: nats@2.10
+    mode: NON_HA
+
+  - hostname: valkey             # Valkey — idempotency dedup, rate limits, live counters
+    type: valkey@7.2
+    mode: NON_HA
+
+  - hostname: clickhouse         # ClickHouse — delivery history + latency percentiles
+    type: clickhouse@24.8
+    mode: NON_HA
+
+  - hostname: storage            # S3-compatible object storage — raw payload archive
+    type: object-storage
+    objectStorageSize: 2
+
+  # ---------- application services (built/run from zerops.yaml) ----------
+  - hostname: api                # FastAPI ingestion + dashboard (public)
+    type: python@3.12
+    enableSubdomainAccess: true  # gives you a public https://xxx.zerops.app URL
+    minContainers: 1
+    maxContainers: 4             # autoscaling for the webhook-burst demo
+
+  - hostname: worker             # delivery worker (no public port)
+    type: python@3.12
+    minContainers: 1
+    maxContainers: 6             # scales up as the queue backs up
