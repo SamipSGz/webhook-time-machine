@@ -54,19 +54,6 @@ Open http://localhost:8000 → you're redirected to a fresh demo workspace dashb
 The dashboard shows your **ingest URL** (`/in/{token}`) forwarding to the built-in
 flaky sample receiver.
 
-## The 90-second demo
-
-1. Open the dashboard. Copy the ingest URL shown at the top.
-2. Blast a burst of events (the sample receiver fails ~40% and sometimes stalls):
-   ```bash
-   python scripts/loadgen.py http://localhost:8000/in/<token> --count 1000 --dupes 50
-   ```
-3. Watch **live**: Received climbs, Delivered/Failed split, Dead-letter grows,
-   Duplicates get suppressed (50 dupes → 0 extra deliveries), p95 latency updates.
-4. Click **🩹 Heal receiver** (makes the target reliable).
-5. Click **▶ Replay failures** — every failed + dead delivery requeues; the queue
-   drains and the **success rate climbs in real time**. That's the time machine.
-
 ## Deploy to Zerops
 
 ```bash
