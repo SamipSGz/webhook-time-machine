@@ -10,9 +10,9 @@ _COLUMNS = [
 ]
 
 
-def _post(sql: str, *, body: bytes | None = None, params: dict | None = None) -> str:
+def _post(sql: str, *, body: bytes | None = None, params: dict | None = None, use_db: bool = True) -> str:
     url = f"http://{settings.clickhouse_host}:{settings.clickhouse_port}/"
-    p = {"database": settings.clickhouse_db}
+    p = {"database": settings.clickhouse_db} if use_db else {}
     if params:
         p.update(params)
     headers = {
@@ -30,6 +30,8 @@ def _post(sql: str, *, body: bytes | None = None, params: dict | None = None) ->
 
 
 def init_schema() -> None:
+    # the target database may not exist yet on a fresh managed ClickHouse
+    _post(f"CREATE DATABASE IF NOT EXISTS {settings.clickhouse_db}", use_db=False)
     _post(
         """
         CREATE TABLE IF NOT EXISTS delivery_attempts (
