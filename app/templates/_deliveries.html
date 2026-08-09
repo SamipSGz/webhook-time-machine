@@ -1,0 +1,20 @@
+<table>
+  <thead>
+    <tr><th>Delivery</th><th>Status</th><th>Attempts</th><th>Last code</th><th>Last error</th><th>Idempotency key</th></tr>
+  </thead>
+  <tbody>
+  {% for r in rows %}
+    <tr>
+      <td><code>{{ r['id']|string|truncate(8, True, '') }}</code></td>
+      <td><span class="pill s-{{ r['status'] }}">{{ r['status'] }}</span></td>
+      <td>{{ r['attempts'] }}</td>
+      <td>{{ r['last_status_code'] or '—' }}</td>
+      <td>{{ (r['last_error'] or '')|truncate(40) }}</td>
+      <td>{{ r['idempotency_key'] or '—' }}</td>
+    </tr>
+  {% endfor %}
+  {% if not rows %}
+    <tr><td colspan="6" style="color:#8a93a6">No deliveries yet — send a webhook to get started.</td></tr>
+  {% endif %}
+  </tbody>
+</table>

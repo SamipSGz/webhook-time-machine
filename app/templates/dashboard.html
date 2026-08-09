@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Webhook Time Machine · {{ name }}</title>
+<script src="https://unpkg.com/htmx.org@2.0.4"></script>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.5 ui-sans-serif, system-ui, sans-serif;
+         background: #0b0e14; color: #e6e6e6; }
+  header { padding: 20px 28px; border-bottom: 1px solid #1e2430; }
+  h1 { margin: 0; font-size: 18px; letter-spacing: .3px; }
+  .sub { color: #8a93a6; font-size: 13px; margin-top: 4px; }
+  main { padding: 24px 28px; max-width: 1100px; margin: 0 auto; }
+  code { background: #151b26; padding: 2px 6px; border-radius: 5px; font-size: 13px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap: 12px; margin: 18px 0; }
+  .card { background: #121824; border: 1px solid #1e2430; border-radius: 10px; padding: 16px; }
+  .card .n { font-size: 30px; font-weight: 700; }
+  .card .l { color: #8a93a6; font-size: 12px; text-transform: uppercase; letter-spacing: .5px; }
+  .card.ok .n { color: #4ade80; } .card.fail .n { color: #f87171; }
+  .card.dead .n { color: #fb923c; } .card.dup .n { color: #facc15; }
+  .lat { display: flex; gap: 22px; color: #8a93a6; font-size: 13px; margin: 6px 0 20px; }
+  .lat b { color: #e6e6e6; }
+  button { background: #2563eb; color: #fff; border: 0; border-radius: 8px;
+           padding: 10px 16px; font-size: 14px; cursor: pointer; }
+  button.heal { background: #16a34a; }
+  button:hover { filter: brightness(1.1); }
+  table { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 13px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #1a2130; }
+  th { color: #8a93a6; font-weight: 500; }
+  .pill { padding: 2px 8px; border-radius: 20px; font-size: 12px; }
+  .s-success { background: #14351f; color: #4ade80; }
+  .s-failed  { background: #3a1717; color: #f87171; }
+  .s-pending { background: #23293a; color: #93a4c0; }
+  .s-dead    { background: #3a2410; color: #fb923c; }
+</style>
+</head>
+<body>
+<header>
+  <h1>⏳ Webhook Time Machine</h1>
+  <div class="sub">Send webhooks to <code>{{ ingest_url }}</code> → forwarded to <code>{{ destination_url }}</code></div>
+</header>
+<main>
+  <div class="cards">
+    <div class="card"><div class="n" id="received">0</div><div class="l">Received</div></div>
+    <div class="card ok"><div class="n" id="delivered">0</div><div class="l">Delivered</div></div>
+    <div class="card fail"><div class="n" id="failed">0</div><div class="l">Failed</div></div>
+    <div class="card dead"><div class="n" id="dead">0</div><div class="l">Dead-letter</div></div>
+    <div class="card dup"><div class="n" id="duplicate">0</div><div class="l">Duplicates</div></div>
+    <div class="card"><div class="n" id="retried">0</div><div class="l">Replayed</div></div>
+  </div>
+
+  <div class="lat">
+    <span>Success rate: <b id="success_rate">0</b>%</span>
+    <span>p50: <b id="p50">0</b>ms</span>
+    <span>p95: <b id="p95">0</b>ms</span>
+    <span>p99: <b id="p99">0</b>ms</span>
+    <span>Attempts: <b id="attempts">0</b></span>
+  </div>
+
+  <div style="display:flex; gap:10px;">
+    <button hx-post="/api/{{ endpoint_id }}/replay-failures" hx-swap="none">▶ Replay failures</button>
+    <button class="heal" hx-post="/sample/heal" hx-swap="none">🩹 Heal receiver</button>
+  </div>
+
+  <div hx-get="/api/{{ endpoint_id }}/deliveries" hx-trigger="load, every 2s" hx-swap="innerHTML">
+    Loading deliveries…
+  </div>
+</main>
+
+<script>
+  const es = new EventSource("/d/{{ endpoint_id }}/stream");
+  es.onmessage = (e) => {
+    const d = JSON.parse(e.data);
+    for (const [k, v] of Object.entries(d.stats)) {
+      const el = document.getElementById(k); if (el) el.textContent = v;
+    }
+    for (const k of ["success_rate", "p50", "p95", "p99", "attempts"]) {
+      const el = document.getElementById(k); if (el) el.textContent = d.latency[k];
+    }
+  };
+</script>
+</body>
+</html>
