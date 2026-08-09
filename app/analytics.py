@@ -1,30 +1,36 @@
-import threading
+import json
 
-import clickhouse_connect
+import httpx
 
 from app.config import settings
 
-# thread-local client: clickhouse-connect isn't safe for concurrent queries in one session
-_local = threading.local()
+_COLUMNS = [
+    "endpoint_id", "event_id", "delivery_id", "attempt_no",
+    "status_code", "latency_ms", "success", "error",
+]
 
 
-def get_client():
-    client = getattr(_local, "client", None)
-    if client is None:
-        client = clickhouse_connect.get_client(
-            host=settings.clickhouse_host,
-            port=settings.clickhouse_port,
-            username=settings.clickhouse_user,
-            password=settings.clickhouse_password,
-            database=settings.clickhouse_db,
-        )
-        _local.client = client
-    return client
+def _post(sql: str, *, body: bytes | None = None, params: dict | None = None) -> str:
+    url = f"http://{settings.clickhouse_host}:{settings.clickhouse_port}/"
+    p = {"database": settings.clickhouse_db}
+    if params:
+        p.update(params)
+    headers = {
+        "X-ClickHouse-User": settings.clickhouse_user,
+        "X-ClickHouse-Key": settings.clickhouse_password,
+    }
+    with httpx.Client(timeout=10) as c:
+        if body is not None:
+            p["query"] = sql
+            r = c.post(url, params=p, content=body, headers=headers)
+        else:
+            r = c.post(url, params=p, content=sql, headers=headers)
+    r.raise_for_status()
+    return r.text
 
 
 def init_schema() -> None:
-    client = get_client()
-    client.command(
+    _post(
         """
         CREATE TABLE IF NOT EXISTS delivery_attempts (
             ts           DateTime64(3) DEFAULT now64(3),
@@ -53,32 +59,43 @@ def record_attempt(
     success: bool,
     error: str = "",
 ) -> None:
-    client = get_client()
-    client.insert(
-        "delivery_attempts",
-        [[endpoint_id, event_id, delivery_id, attempt_no, status_code, latency_ms, int(success), error]],
-        column_names=[
-            "endpoint_id", "event_id", "delivery_id", "attempt_no",
-            "status_code", "latency_ms", "success", "error",
-        ],
+    row = {
+        "endpoint_id": endpoint_id, "event_id": event_id, "delivery_id": delivery_id,
+        "attempt_no": attempt_no, "status_code": status_code, "latency_ms": latency_ms,
+        "success": int(success), "error": error,
+    }
+    _post(
+        f"INSERT INTO delivery_attempts ({','.join(_COLUMNS)}) FORMAT JSONEachRow",
+        body=json.dumps(row).encode(),
     )
 
 
 def latency_percentiles(endpoint_id: str) -> dict:
-    client = get_client()
-    row = client.query(
+    text = _post(
         """
-        SELECT
-            count() AS attempts,
-            round(quantile(0.50)(latency_ms)) AS p50,
-            round(quantile(0.95)(latency_ms)) AS p95,
-            round(quantile(0.99)(latency_ms)) AS p99,
-            round(100 * avg(success), 1) AS success_rate
+        SELECT count(),
+               round(quantile(0.50)(latency_ms)),
+               round(quantile(0.95)(latency_ms)),
+               round(quantile(0.99)(latency_ms)),
+               round(100 * avg(success), 1)
         FROM delivery_attempts
         WHERE endpoint_id = {eid:String}
+        FORMAT TabSeparated
         """,
-        parameters={"eid": endpoint_id},
-    ).first_row
-    if not row:
-        return {"attempts": 0, "p50": 0, "p95": 0, "p99": 0, "success_rate": 0.0}
-    return {"attempts": row[0], "p50": row[1], "p95": row[2], "p99": row[3], "success_rate": row[4]}
+        params={"param_eid": endpoint_id},
+    ).strip()
+
+    zeros = {"attempts": 0, "p50": 0, "p95": 0, "p99": 0, "success_rate": 0.0}
+    if not text:
+        return zeros
+    parts = text.split("\t")
+    attempts = int(float(parts[0]))
+    if attempts == 0:
+        return zeros
+    return {
+        "attempts": attempts,
+        "p50": int(float(parts[1])),
+        "p95": int(float(parts[2])),
+        "p99": int(float(parts[3])),
+        "success_rate": float(parts[4]),
+    }
