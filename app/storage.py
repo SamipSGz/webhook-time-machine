@@ -1,5 +1,3 @@
-"""S3-compatible object storage for raw webhook payloads. Keeps large/raw bodies
-out of Postgres; events table stores only the object key."""
 import aioboto3
 
 from app.config import settings

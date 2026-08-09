@@ -1,8 +1,4 @@
-"""Fire a burst of webhooks at an ingestion URL to drive the demo.
-
-Usage:
-    python scripts/loadgen.py http://localhost:8000/in/<token> --count 1000 --dupes 50
-"""
+# Usage: python scripts/loadgen.py http://localhost:8000/in/<token> --count 1000 --dupes 50
 import argparse
 import asyncio
 import json
@@ -37,7 +33,6 @@ async def main():
                 await coro
 
         tasks = [guarded(send(client, args.url, i)) for i in range(args.count)]
-        # Duplicate storm: many sends sharing a single idempotency key.
         tasks += [guarded(send(client, args.url, -1, dup_key="dup-demo-key")) for _ in range(args.dupes)]
         await asyncio.gather(*tasks)
 

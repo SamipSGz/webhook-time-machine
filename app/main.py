@@ -1,13 +1,3 @@
-"""FastAPI app: public webhook ingestion + operator dashboard.
-
-Routes:
-  POST /in/{token}          capture an inbound webhook (dedup, archive, enqueue)
-  GET  /                    redirect to a fresh demo workspace
-  GET  /d/{endpoint_id}     dashboard for one endpoint
-  GET  /d/{endpoint_id}/stream   SSE live counters
-  GET  /api/{endpoint_id}/deliveries   recent deliveries (HTMX table)
-  POST /api/{endpoint_id}/replay-failures  requeue failed + dead deliveries
-"""
 import asyncio
 import json
 import secrets
@@ -30,7 +20,6 @@ async def lifespan(app: FastAPI):
     await db.init_schema()
     await storage.ensure_bucket()
     await queue.connect()
-    # ClickHouse client is sync; run its schema init off the event loop.
     await asyncio.to_thread(analytics.init_schema)
     yield
     await queue.close()
@@ -40,7 +29,6 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Webhook Time Machine", lifespan=lifespan)
 
 
-# ---------------------------------------------------------------- workspaces
 async def create_endpoint(name: str, destination_url: str) -> dict:
     pool = await db.get_pool()
     token = secrets.token_urlsafe(12)
@@ -53,13 +41,11 @@ async def create_endpoint(name: str, destination_url: str) -> dict:
 
 @app.get("/", response_class=HTMLResponse)
 async def home():
-    """Spin up a throwaway demo workspace pointed at the built-in sample receiver."""
     dest = f"{settings.public_base_url}/sample/receive"
     ep = await create_endpoint("demo", dest)
     return RedirectResponse(url=f"/d/{ep['id']}", status_code=303)
 
 
-# ---------------------------------------------------------------- ingestion
 @app.post("/in/{token}")
 async def ingest(token: str, request: Request):
     pool = await db.get_pool()
@@ -84,7 +70,6 @@ async def ingest(token: str, request: Request):
     if is_dup:
         await cache.bump(endpoint_id, "duplicate")
 
-    # Archive raw payload in S3.
     event_id = str(uuid.uuid4())
     body_key = f"{endpoint_id}/{event_id}"
     if body:
@@ -96,8 +81,7 @@ async def ingest(token: str, request: Request):
         uuid.UUID(event_id), ep["id"], idem, json.dumps(headers), body_key, len(body), is_dup,
     )
 
-    # Duplicates are recorded but never delivered.
-    if is_dup:
+    if is_dup:  # recorded but never delivered
         return JSONResponse({"status": "duplicate", "event_id": event_id}, status_code=200)
 
     delivery = await pool.fetchrow(
@@ -108,7 +92,6 @@ async def ingest(token: str, request: Request):
     return JSONResponse({"status": "accepted", "event_id": event_id}, status_code=202)
 
 
-# ---------------------------------------------------------------- dashboard
 @app.get("/d/{endpoint_id}", response_class=HTMLResponse)
 async def dashboard(endpoint_id: str, request: Request):
     pool = await db.get_pool()
@@ -126,8 +109,7 @@ async def dashboard(endpoint_id: str, request: Request):
 
 @app.get("/d/{endpoint_id}/stream")
 async def stream(endpoint_id: str):
-    """Server-Sent Events: push counters + latency percentiles ~1x/sec."""
-    async def gen():
+    async def gen():  # SSE: push counters + latency percentiles ~1x/sec
         while True:
             stats = await cache.get_stats(endpoint_id)
             pct = await asyncio.to_thread(analytics.latency_percentiles, endpoint_id)
@@ -156,7 +138,6 @@ async def deliveries_table(endpoint_id: str, request: Request):
 
 @app.post("/api/{endpoint_id}/replay-failures")
 async def replay_failures(endpoint_id: str):
-    """Requeue every failed/dead delivery for this endpoint. The heart of the demo."""
     pool = await db.get_pool()
     rows = await pool.fetch(
         "SELECT id FROM deliveries WHERE endpoint_id = $1 AND status IN ('failed','dead')",
@@ -171,20 +152,16 @@ async def replay_failures(endpoint_id: str):
     return JSONResponse({"requeued": len(rows)})
 
 
-# ---------------------------------------------------------------- sample receiver (demo target)
+# flaky demo target: fails ~40% and sometimes stalls, until /sample/heal flips it healthy in Valkey
 _sample_counter = {"n": 0}
 
 
 @app.post("/sample/receive")
 async def sample_receive():
-    """Intentionally unreliable target used by demo workspaces: fails ~40% of the
-    time and sometimes stalls, so retries and replay have something to chew on.
-    The 'healthy' flag lives in Valkey so /sample/heal works across all containers."""
     r = cache.get_redis()
     if await r.get("sample:healthy") == "1":
         return Response(status_code=200)
     n = _sample_counter["n"] = _sample_counter["n"] + 1
-    # deterministic-ish flakiness without RNG: ~40% failures, every 7th is slow
     if n % 7 == 0:
         await asyncio.sleep(3)
     if n % 5 in (0, 2):

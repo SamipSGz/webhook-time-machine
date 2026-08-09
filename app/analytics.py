@@ -1,14 +1,10 @@
-"""ClickHouse: append-only delivery-attempt log for high-volume history and
-latency percentiles. Kept separate from Postgres (which holds current state)."""
 import threading
 
 import clickhouse_connect
 
 from app.config import settings
 
-# clickhouse-connect clients are NOT safe for concurrent queries within one
-# session. record_attempt() runs from a pool of worker threads (via to_thread),
-# so each thread gets its own client.
+# thread-local client: clickhouse-connect isn't safe for concurrent queries in one session
 _local = threading.local()
 
 

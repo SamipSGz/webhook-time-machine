@@ -1,5 +1,3 @@
-"""NATS JetStream: durable transport between ingestion and delivery workers.
-JetStream gives us at-least-once delivery, plus ack/nak with delay for retries."""
 import json
 
 import nats
@@ -12,7 +10,6 @@ _js = None
 
 
 async def connect():
-    """Connect and ensure the delivery stream exists. Safe to call repeatedly."""
     global _nc, _js
     if _js is not None:
         return _js
@@ -23,8 +20,7 @@ async def connect():
             StreamConfig(name=settings.delivery_stream, subjects=[settings.delivery_subject])
         )
     except Exception:
-        # Stream already exists — fine.
-        pass
+        pass  # stream already exists
     return _js
 
 

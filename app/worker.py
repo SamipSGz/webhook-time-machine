@@ -1,9 +1,3 @@
-"""Delivery worker: pulls delivery jobs from NATS JetStream, forwards the archived
-payload to the endpoint's destination, and drives the retry / dead-letter lifecycle.
-
-Retry strategy: on failure we NAK the message with an exponential-backoff delay so
-JetStream redelivers it later — no separate scheduler needed. After MAX_ATTEMPTS the
-delivery is marked 'dead' and the message is ACKed (removed from the queue)."""
 import asyncio
 import json
 import time
@@ -30,10 +24,8 @@ async def _load_job(delivery_id: str):
 
 
 async def _attempt_delivery(job) -> tuple[bool, int, int, str]:
-    """Returns (success, status_code, latency_ms, error)."""
     body = await storage.get_payload(job["body_key"]) if job["body_key"] else b""
     headers = json.loads(job["headers"]) if job["headers"] else {}
-    # Strip hop-by-hop / host headers before forwarding.
     fwd = {k: v for k, v in headers.items()
            if k.lower() not in ("host", "content-length", "connection")}
 
@@ -43,7 +35,7 @@ async def _attempt_delivery(job) -> tuple[bool, int, int, str]:
             resp = await client.post(job["destination_url"], content=body, headers=fwd)
         latency_ms = int((time.perf_counter() - start) * 1000)
         return (200 <= resp.status_code < 300, resp.status_code, latency_ms, "")
-    except Exception as exc:  # noqa: BLE001 — timeouts, connection errors, etc.
+    except Exception as exc:  # noqa: BLE001
         latency_ms = int((time.perf_counter() - start) * 1000)
         return (False, 0, latency_ms, str(exc)[:200])
 
@@ -69,7 +61,7 @@ async def handle(msg) -> None:
             WHERE id = $1""",
         uuid.UUID(delivery_id), attempt_no, status_code or None, error or None, success,
     )
-    # Analytics is best-effort: a ClickHouse hiccup must never break delivery.
+    # best-effort: a ClickHouse hiccup must never break delivery
     try:
         await asyncio.to_thread(
             analytics.record_attempt,
@@ -88,10 +80,10 @@ async def handle(msg) -> None:
     if attempt_no >= settings.max_attempts:
         await pool.execute("UPDATE deliveries SET status='dead' WHERE id=$1", uuid.UUID(delivery_id))
         await cache.bump(endpoint_id, "dead")
-        await msg.ack()  # give up: remove from queue
+        await msg.ack()
         return
 
-    # Retry: mark failed and NAK with exponential backoff so JetStream redelivers.
+    # retry: NAK with exponential backoff so JetStream redelivers
     await pool.execute("UPDATE deliveries SET status='failed' WHERE id=$1", uuid.UUID(delivery_id))
     await cache.bump(endpoint_id, "failed")
     delay = settings.base_backoff_seconds * (2 ** (attempt_no - 1))
@@ -107,9 +99,8 @@ async def main() -> None:
         try:
             msgs = await sub.fetch(batch=10, timeout=5)
         except Exception:
-            continue  # fetch timeout when idle
-        # return_exceptions so one bad message can never kill the worker loop;
-        # an unhandled message stays unacked and JetStream redelivers it.
+            continue
+        # return_exceptions so one bad message can't kill the loop; it stays unacked and is redelivered
         results = await asyncio.gather(*(handle(m) for m in msgs), return_exceptions=True)
         for r in results:
             if isinstance(r, Exception):

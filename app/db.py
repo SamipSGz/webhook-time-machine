@@ -1,5 +1,3 @@
-"""Postgres access via a single asyncpg pool. Holds the source-of-truth state:
-endpoints, events, and delivery lifecycle."""
 from pathlib import Path
 
 import asyncpg
@@ -20,9 +18,7 @@ async def init_schema() -> None:
     sql = (Path(__file__).parent / "schema.sql").read_text()
     pool = await get_pool()
     async with pool.acquire() as conn:
-        # `CREATE TABLE IF NOT EXISTS` is not race-safe under concurrency (api and
-        # worker init at the same time). A transaction-scoped advisory lock
-        # serializes concurrent initializers so exactly one wins the race.
+        # advisory lock: CREATE TABLE IF NOT EXISTS is not race-safe when api and worker init at once
         async with conn.transaction():
             await conn.execute("SELECT pg_advisory_xact_lock(987654321)")
             await conn.execute(sql)
