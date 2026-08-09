@@ -37,7 +37,7 @@ zerops:
         INTERNAL_BASE_URL: http://api:8000
         MAX_ATTEMPTS: "5"
         BASE_BACKOFF_SECONDS: "2"
-      start: uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips '*'
+      start: python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips '*'
       healthCheck:
         httpGet:
           port: 8000
