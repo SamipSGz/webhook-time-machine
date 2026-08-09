@@ -17,10 +17,16 @@ templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # core deps: ingestion cannot work without these
     await db.init_schema()
-    await storage.ensure_bucket()
     await queue.connect()
-    await asyncio.to_thread(analytics.init_schema)
+    # non-critical: never let analytics/storage init take down the API
+    for label, coro in (("storage", storage.ensure_bucket()),
+                        ("clickhouse", asyncio.to_thread(analytics.init_schema))):
+        try:
+            await coro
+        except Exception as exc:  # noqa: BLE001
+            print(f"[startup] {label} init failed (continuing): {exc}", flush=True)
     yield
     await queue.close()
     await db.close_pool()
@@ -109,10 +115,15 @@ async def dashboard(endpoint_id: str, request: Request):
 
 @app.get("/d/{endpoint_id}/stream")
 async def stream(endpoint_id: str):
+    zero_pct = {"attempts": 0, "p50": 0, "p95": 0, "p99": 0, "success_rate": 0.0}
+
     async def gen():  # SSE: push counters + latency percentiles ~1x/sec
         while True:
             stats = await cache.get_stats(endpoint_id)
-            pct = await asyncio.to_thread(analytics.latency_percentiles, endpoint_id)
+            try:
+                pct = await asyncio.to_thread(analytics.latency_percentiles, endpoint_id)
+            except Exception:
+                pct = zero_pct
             payload = json.dumps({"stats": stats, "latency": pct})
             yield f"data: {payload}\n\n"
             await asyncio.sleep(1)
