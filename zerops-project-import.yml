@@ -34,11 +34,13 @@ services:
   # ---------- application services (built/run from zerops.yaml) ----------
   - hostname: api                # FastAPI ingestion + dashboard (public)
     type: python@3.12
+    buildFromGit: https://github.com/SamipSGz/webhook-time-machine@main
     enableSubdomainAccess: true  # gives you a public https://xxx.zerops.app URL
     minContainers: 1
     maxContainers: 4             # autoscaling for the webhook-burst demo
 
   - hostname: worker             # delivery worker (no public port)
     type: python@3.12
+    buildFromGit: https://github.com/SamipSGz/webhook-time-machine@main
     minContainers: 1
     maxContainers: 6             # scales up as the queue backs up
