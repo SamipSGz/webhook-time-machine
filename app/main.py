@@ -129,12 +129,21 @@ async def stream(endpoint_id: str):
     zero_pct = {"attempts": 0, "p50": 0, "p95": 0, "p99": 0, "success_rate": 0.0}
 
     async def gen():  # SSE: push counters + latency percentiles ~1x/sec
+        pool = await db.get_pool()
         while True:
             stats = await cache.get_stats(endpoint_id)
             try:
                 pct = await asyncio.to_thread(analytics.latency_percentiles, endpoint_id)
             except Exception:
-                pct = zero_pct
+                pct = dict(zero_pct)
+            # success_rate = share of DELIVERIES that have succeeded (recovers to
+            # 100% after replay), not the attempt-level rate from ClickHouse.
+            row = await pool.fetchrow(
+                """SELECT count(*) FILTER (WHERE status='success') AS ok, count(*) AS total
+                     FROM deliveries WHERE endpoint_id = $1""",
+                uuid.UUID(endpoint_id),
+            )
+            pct["success_rate"] = round(100 * row["ok"] / row["total"], 1) if row["total"] else 0.0
             payload = json.dumps({"stats": stats, "latency": pct})
             yield f"data: {payload}\n\n"
             await asyncio.sleep(1)
