@@ -40,25 +40,6 @@ async def healthz():
     return {"ok": True}
 
 
-@app.get("/debug/ch")
-async def debug_ch():
-    import httpx as _httpx
-    s = settings
-    url = f"http://{s.clickhouse_host}:{s.clickhouse_port}/"
-    headers = {"X-ClickHouse-User": s.clickhouse_user, "X-ClickHouse-Key": s.clickhouse_password}
-    out = {"db_configured": s.clickhouse_db, "user_configured": s.clickhouse_user}
-    for name, sql in [
-        ("databases", "SHOW DATABASES"),
-        ("current_user", "SELECT currentUser()"),
-        ("create_db", f"CREATE DATABASE IF NOT EXISTS {s.clickhouse_db}"),
-    ]:
-        try:
-            with _httpx.Client(timeout=8) as c:
-                r = c.post(url, content=sql, headers=headers)
-            out[name] = {"status": r.status_code, "body": r.text.strip()[:300]}
-        except Exception as e:  # noqa: BLE001
-            out[name] = {"error": str(e)[:200]}
-    return out
 
 
 async def create_endpoint(name: str, destination_url: str) -> dict:

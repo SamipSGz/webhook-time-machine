@@ -27,7 +27,7 @@ zerops:
         CLICKHOUSE_PORT: "8123"
         CLICKHOUSE_USER: zerops
         CLICKHOUSE_PASSWORD: ${clickhouse_password}
-        CLICKHOUSE_DB: clickhouse
+        CLICKHOUSE_DB: db
         S3_ENDPOINT: ${storage_apiUrl}
         S3_ACCESS_KEY: ${storage_accessKeyId}
         S3_SECRET_KEY: ${storage_secretAccessKey}

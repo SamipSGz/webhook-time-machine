@@ -30,8 +30,6 @@ def _post(sql: str, *, body: bytes | None = None, params: dict | None = None, us
 
 
 def init_schema() -> None:
-    # the target database may not exist yet on a fresh managed ClickHouse
-    _post(f"CREATE DATABASE IF NOT EXISTS {settings.clickhouse_db}", use_db=False)
     _post(
         """
         CREATE TABLE IF NOT EXISTS delivery_attempts (
