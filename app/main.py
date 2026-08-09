@@ -112,7 +112,11 @@ async def dashboard(endpoint_id: str, request: Request):
                              uuid.UUID(endpoint_id))
     if ep is None:
         return HTMLResponse("Unknown endpoint", status_code=404)
-    ingest_url = f"{str(request.base_url).rstrip('/')}/in/{ep['token']}"
+    base = str(request.base_url).rstrip("/")
+    # behind Zerops' TLS proxy the scheme comes through as http; show https publicly
+    if base.startswith("http://") and "127.0.0.1" not in base and "localhost" not in base:
+        base = "https://" + base[len("http://"):]
+    ingest_url = f"{base}/in/{ep['token']}"
     return templates.TemplateResponse(
         "dashboard.html",
         {"request": request, "endpoint_id": endpoint_id, "name": ep["name"],
