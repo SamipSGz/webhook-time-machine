@@ -1,9 +1,7 @@
 # Build + run config for the two Python app services (api, worker).
-# Deploy with: `zcli push` (or wire the GitHub integration in the Zerops GUI).
-#
-# Env vars use Zerops' cross-service reference syntax ${servicehostname_var}.
-# Managed services expose their own connection vars — verify exact names in the
-# Zerops GUI (Service detail → "Environment variables") if a name differs here.
+# Deps are installed in the RUN container via prepareCommands: Zerops build and
+# run are separate containers, so packages pip-installed during build do not
+# exist at runtime. deployFiles ships the code; prepareCommands installs deps.
 
 zerops:
   # ============================================================ API (public)
@@ -11,13 +9,13 @@ zerops:
     build:
       base: python@3.12
       buildCommands:
-        - python -m pip install --upgrade pip
-        - pip install -r requirements.txt
+        - echo "packaging application files"
       deployFiles: ./
-      cache:
-        - ~/.cache/pip
     run:
       base: python@3.12
+      prepareCommands:
+        - python -m pip install --upgrade pip
+        - python -m pip install -r requirements.txt
       ports:
         - port: 8000
           httpSupport: true
@@ -41,19 +39,19 @@ zerops:
       healthCheck:
         httpGet:
           port: 8000
-          path: /
+          path: /healthz
 
   # ============================================================ Worker (private)
   - setup: worker
     build:
       base: python@3.12
       buildCommands:
-        - python -m pip install --upgrade pip
-        - pip install -r requirements.txt
+        - echo "packaging application files"
       deployFiles: ./
-      cache:
-        - ~/.cache/pip
     run:
       base: python@3.12
+      prepareCommands:
+        - python -m pip install --upgrade pip
+        - python -m pip install -r requirements.txt
       envVariables: *appenv
       start: python -m app.worker

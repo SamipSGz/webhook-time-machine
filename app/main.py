@@ -35,6 +35,11 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Webhook Time Machine", lifespan=lifespan)
 
 
+@app.get("/healthz")
+async def healthz():
+    return {"ok": True}
+
+
 async def create_endpoint(name: str, destination_url: str) -> dict:
     pool = await db.get_pool()
     token = secrets.token_urlsafe(12)
