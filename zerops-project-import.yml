@@ -24,7 +24,7 @@ services:
     mode: NON_HA
 
   - hostname: clickhouse         # ClickHouse — delivery history + latency percentiles
-    type: clickhouse@24.8
+    type: clickhouse@25.3
     mode: NON_HA
 
   - hostname: storage            # S3-compatible object storage — raw payload archive

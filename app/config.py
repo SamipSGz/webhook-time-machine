@@ -29,7 +29,8 @@ class Settings(BaseSettings):
     base_backoff_seconds: int = 2
     delivery_timeout_seconds: int = 10
 
-    public_base_url: str = "http://localhost:8000"
+    # where the worker reaches the built-in sample receiver (internal hostname on Zerops)
+    internal_base_url: str = "http://localhost:8000"
 
 
 settings = Settings()

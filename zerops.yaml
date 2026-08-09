@@ -21,23 +21,22 @@ zerops:
         - port: 8000
           httpSupport: true
       envVariables: &appenv
-        POSTGRES_DSN: postgresql://${db_user}:${db_password}@${db_hostname}:${db_port}/${db_dbName}
-        NATS_URL: nats://${nats_hostname}:${nats_port}
-        REDIS_URL: redis://default:${valkey_password}@${valkey_hostname}:${valkey_port}/0
+        POSTGRES_DSN: ${db_connectionString}
+        NATS_URL: ${nats_connectionString}
+        REDIS_URL: ${valkey_connectionString}
         CLICKHOUSE_HOST: ${clickhouse_hostname}
         CLICKHOUSE_PORT: "8123"
-        CLICKHOUSE_USER: ${clickhouse_user}
+        CLICKHOUSE_USER: zerops
         CLICKHOUSE_PASSWORD: ${clickhouse_password}
-        CLICKHOUSE_DB: ${clickhouse_dbName}
+        CLICKHOUSE_DB: clickhouse
         S3_ENDPOINT: ${storage_apiUrl}
         S3_ACCESS_KEY: ${storage_accessKeyId}
         S3_SECRET_KEY: ${storage_secretAccessKey}
         S3_BUCKET: ${storage_bucketName}
-        # api's public subdomain — referenced by name so the worker sees it too
-        PUBLIC_BASE_URL: https://${api_zeropsSubdomain}
+        INTERNAL_BASE_URL: http://api:8000
         MAX_ATTEMPTS: "5"
         BASE_BACKOFF_SECONDS: "2"
-      start: uvicorn app.main:app --host 0.0.0.0 --port 8000
+      start: uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips '*'
       healthCheck:
         httpGet:
           port: 8000

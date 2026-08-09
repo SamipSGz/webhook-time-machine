@@ -41,7 +41,7 @@ async def create_endpoint(name: str, destination_url: str) -> dict:
 
 @app.get("/", response_class=HTMLResponse)
 async def home():
-    dest = f"{settings.public_base_url}/sample/receive"
+    dest = f"{settings.internal_base_url}/sample/receive"
     ep = await create_endpoint("demo", dest)
     return RedirectResponse(url=f"/d/{ep['id']}", status_code=303)
 
@@ -99,7 +99,7 @@ async def dashboard(endpoint_id: str, request: Request):
                              uuid.UUID(endpoint_id))
     if ep is None:
         return HTMLResponse("Unknown endpoint", status_code=404)
-    ingest_url = f"{settings.public_base_url}/in/{ep['token']}"
+    ingest_url = f"{str(request.base_url).rstrip('/')}/in/{ep['token']}"
     return templates.TemplateResponse(
         "dashboard.html",
         {"request": request, "endpoint_id": endpoint_id, "name": ep["name"],
